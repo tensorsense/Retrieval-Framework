@@ -1,21 +1,12 @@
 from factory import build_rag_chain
 
 from trulens_eval import TruChain, Feedback, Tru
-from trulens_eval.feedback.provider import AzureOpenAI
 from trulens_eval.feedback import Groundedness
 from trulens_eval.app import App
 
 import numpy as np
-from demo import config
+import config
 
-# from dotenv import load_dotenv, find_dotenv
-# _ = load_dotenv(find_dotenv("azure.env"))
-
-QUESTIONS = [
-    "What is the link between AU12 and cognitive load?",
-    "How does cognitive load affect facial expressions?",
-    "What action units get activated under heavy cognitive load?",
-]
 
 tru = Tru()
 tru.reset_database()
@@ -23,7 +14,7 @@ tru.reset_database()
 
 def init_feedbacks(chain):
     # Initialize provider class
-    openai = AzureOpenAI(deployment_name=config.AZURE_OPENAI_DEPLOYMENT_AGENT)
+    openai = config.openai_trulens_model
 
     # select context to be used in feedback. the location of context is app specific.
 
@@ -46,7 +37,7 @@ def init_feedbacks(chain):
         Feedback(openai.qs_relevance_with_cot_reasons)
         .on_input()
         .on(context)
-        .aggregate(np.mean)
+        .aggregate(np.mean) # TODO: remove numpy dependency
     )
     return [f_qa_relevance, f_context_relevance, f_groundedness]
 
@@ -59,7 +50,7 @@ def run_eval(app_id):
                             app_id=app_id,
                             feedbacks=feedbacks)
 
-    for q in QUESTIONS:
+    for q in config.TRULENS_QUESTIONS:
         with tru_recorder as recording:
             rag_chain.invoke(q)
 

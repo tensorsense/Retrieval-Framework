@@ -3,8 +3,6 @@ from typing import List
 
 from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.chat_models import AzureChatOpenAI
-from langchain_community.embeddings import AzureOpenAIEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -12,25 +10,12 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnablePassthrough
 from langchain.document_loaders import TextLoader
 
-from demo import config
+import config
 
-# from dotenv import load_dotenv, find_dotenv
-# _ = load_dotenv(find_dotenv("azure.env"))
 
 root_path = Path(__file__).parent.resolve()
-library_path = root_path / "library"
+library_path = root_path / "library" / "fulltext"
 db_path = root_path / "vectorstore"
-
-embedding = AzureOpenAIEmbeddings(
-    azure_deployment=config.AZURE_OPENAI_DEPLOYMENT_EMBEDDING,
-    openai_api_version="2023-07-01-preview",
-)
-
-llm = AzureChatOpenAI(
-    temperature=0,
-    azure_deployment=config.AZURE_OPENAI_DEPLOYMENT_BASE_RETREIVER,
-    openai_api_version="2023-07-01-preview",
-)
 
 
 def load_library() -> List[Document]:
@@ -44,13 +29,13 @@ def load_library() -> List[Document]:
 def build_simple_retriever() -> BaseRetriever:
     if db_path.exists():
         print(f"Loading vectorstore from disk: {db_path.as_posix()}")
-        vectorstore = Chroma(persist_directory=db_path.as_posix(), embedding_function=embedding)
+        vectorstore = Chroma(persist_directory=db_path.as_posix(), embedding_function=config.openai_emb_model)
     else:
         print(f"Creating a vectorstore and writing it to: {db_path.as_posix()}")
         docs = load_library()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         splits = text_splitter.split_documents(docs)
-        vectorstore = Chroma.from_documents(documents=splits, embedding=embedding, persist_directory=db_path.as_posix())
+        vectorstore = Chroma.from_documents(documents=splits, embedding=config.openai_emb_model, persist_directory=db_path.as_posix())
     retriever = vectorstore.as_retriever()
     return retriever
 
@@ -66,7 +51,7 @@ def build_rag_chain():
     rag_chain = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | prompt
-            | llm
+            | config.openai_chat_model
             | StrOutputParser()
     )
 

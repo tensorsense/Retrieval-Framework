@@ -1,0 +1,5 @@
+pylatexenc
+openai
+langchain
+trulens-eval
+requests

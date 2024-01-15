@@ -2,17 +2,17 @@ import hashlib
 import sqlite3
 import os
 import json
-import requests
 import zipfile
 import io
 import base64
-from openai import AzureOpenAI as OpenAI
+from pathlib import Path
 import re
+
+import requests
 from pylatexenc.latexwalker import LatexWalker, LatexEnvironmentNode, LatexMacroNode, LatexGroupNode
 from pylatexenc.latex2text import LatexNodes2Text
-from pathlib import Path
 
-from demo import config
+import config
 
 class PdfProcessor:
     IMAGE_START_DELIMITER = '\n<===IMAGE START===>\n'
@@ -27,7 +27,6 @@ class PdfProcessor:
             "app_id": config.MATHPIX_APP_ID,
             "app_key": config.MATHPIX_APP_KEY,
         }
-        self.oai_client = OpenAI()
         self.result = []
 
     def _initialize_db(self):
@@ -247,12 +246,10 @@ class PdfProcessor:
 
     def _process_table(self, table_text):
         try:
-            response = self.oai_client.chat.completions.create(
+            response = config.openai_model.chat.completions.create(
                 messages=[
                     {"role": "user", "content": process_table_prompt + table_text}
                 ],
-                model="gpt-4-1106", # TODO: config
-                temperature=0
             )
             result = response.choices[0].message.content
             return result
@@ -264,8 +261,7 @@ class PdfProcessor:
         try:
             base64_image = base64.b64encode(image_content).decode('utf-8')
 
-            response = self.oai_client.chat.completions.create(
-                model="gpt-4-v", # TODO: config
+            response = config.openai_vision_model.chat.completions.create(
                 messages=[
                     {"role": "user", "content": [
                         {"type": "text", "text": process_image_prompt},

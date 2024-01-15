@@ -1,12 +1,13 @@
 from pathlib import Path
-from langchain.chat_models import AzureChatOpenAI
+
 from langchain.docstore.document import Document
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
 
-model = AzureChatOpenAI(temperature=0, model="gpt-4-1106")
+import config
 
+# TODO: generic prompt, not FACS
 # scientific study. If this study is copyrighted, I have purchased it for both of us to use.
 summary_prompt = """
 You are provided with text containing some research.
@@ -32,7 +33,7 @@ Output:"""
 prompt_template = PromptTemplate.from_template(prompt_template_text)
 
 # Define LLM chain
-llm_chain = LLMChain(llm=model, prompt=prompt_template) 
+llm_chain = LLMChain(llm=config.openai_chat_model, prompt=prompt_template) 
 
 # Define StuffDocumentsChain
 sumamrize_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")

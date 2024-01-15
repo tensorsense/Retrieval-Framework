@@ -1,32 +1,37 @@
 # Retrieval Framework
 
-This is the RAG component of the Demo Agent.
+## Configuration
+
+1. Create `.env` from `.env.example`, provide:
+- to use regular openai api (openai.com) provide `OPENAI_API_KEY`
+- to use azure deployment provide:
+  - `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_OPENAI_API_KEY`
+  - `AZURE_OPENAI_DEPLOYMENT_CHAT`: required for PDF import and RAG
+  - `AZURE_OPENAI_DEPLOYMENT_EMBEDDING`: required only for RAG
+  - `AZURE_OPENAI_DEPLOYMENT_VISION`: required only for PDF import
+- `MATHPIX_APP_ID` and `MATHPIX_APP_KEY`: required only for PDF import
+
+2. In `config.py`:
+- set `OPENAI_PROVIDER` according to .env: `openai` / `azure`
 
 ## PDF import
 
-1. Configure `MATHPIX_APP_ID`, `MATHPIX_APP_KEY` and `OPENAI_API_KEY` in `mathpix.env`.
-2. Put PDF files in the inbox.
-3. Run `python3 process_inbox.py`
+1. Put PDF files in `library/inbox`.
+2. Run `python3 process_inbox.py`
+3. Check `library/fulltext` for full text parses and `library/summary` for summaries.
 
-Every PDF in the inbox is going to be transformed into a plain-text file. Original PDFs are stored in the archives.
-
-- To transform a PDF, it is first converted to LaTeX using Mathpix API.
-- Tables and images get parsed out of the resulting file and sent to OpenAI GPT-4 and GPT-4-Vision for summarization.
+Processed PDFs are moved to `library/archive`.
 
 ## Build the RAG
+Build a RAG chain based on a simple retriever on top of the text library.
+Run `python3 factory.py`
 
-Build a RAG chain based on a simple retriever on top of the library.
-
-In order to try:
-
-1. Configure Azure credentials in `azure.env` and uncommend `dotenv` loading in `factory.py`.
-2. Run `python3 factory.py`
-
-## Evaluate RAG
+## Evaluate the RAG
 
 Calculate a [RAG triad](https://www.trulens.org/trulens_eval/core_concepts_rag_triad/) of metrics using TruLens.
 
-1. Configure Azure credentials as before.
+1. set `TRULENS_QUESTIONS` in config.py
 2. Run `python3 eval.py`.
-3. Open the dashboard at port 8000.
-4. Wait for evaluation runs to finish. 
+3. Open the dashboard in a browser at localhost:8000.
+4. Wait for evaluation runs to finish.
