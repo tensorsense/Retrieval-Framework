@@ -19,6 +19,7 @@ from tqdm import tqdm
 from pdf_parser.latex_helpers import LatexChunk, LatexChunkType
 from pdf_parser.latex_helpers import get_latex_chunks, fetch_img, fetch_tex_filename
 from pdf_parser.latex_helpers import preprocess_regex, postprocess_regex
+import logging
 
 TABLE_TEMPLATE = \
     """Your role is to prepare scientific papers for blind scientists. You need to convert tables in scientific articles for their display on Braille linear displays. Attached is a certain table in LaTeX format. You need to:
@@ -94,6 +95,7 @@ class MathpixProcessor:
         pass
 
     def submit_pdf(self, pdf_path: Path) -> MathpixResult:
+        logging.info(f"Submitting {pdf_path.name}...")
         response = requests.post(
             self.MATHPIX_ENDPOINT,
             headers=self.headers,
@@ -106,7 +108,9 @@ class MathpixProcessor:
         if response.ok:
             response_dict = json.loads(response.text.encode("utf8"))
             mathpix_result.pdf_id = response_dict["pdf_id"]
+            logging.info(f"Received PDF id: {mathpix_result.pdf_id}")
             if "error" in response_dict:
+                logging.error(f"Receieved error from server: {response_dict['error']}")
                 mathpix_result.error = response_dict["error"]
                 mathpix_result.error_info = response_dict["error_info"]
         else:
@@ -118,7 +122,7 @@ class MathpixProcessor:
         return mathpix_result
 
     def await_result(self, mathpix_result: MathpixResult, timeout_s: int = 60, sleep_s: int = 5) -> MathpixResult:
-        with tqdm(total=100, desc="Processing % ...") as pbar:
+        with tqdm(total=100, desc="Processing...") as pbar:
             start_time = time.time()
             while True:
                 if time.time() - start_time > timeout_s:
@@ -134,11 +138,13 @@ class MathpixProcessor:
                     percent_done = int(response_dict["percent_done"]) if "percent_done" in response_dict else 0
 
                     if status == "error":
+                        logging.error("An error occurred during processing on the server side.")
                         mathpix_result.error = "An error occurred during processing on the server side."
                         break
 
                     pbar.update(percent_done - pbar.n)
                     if status == "completed":
+                        logging.info("Completed processing")
                         break
                 else:
                     try:
@@ -152,10 +158,12 @@ class MathpixProcessor:
             return mathpix_result
 
         try:
+            logging.info("Downloading tex.zip...")
             url = f"{self.MATHPIX_ENDPOINT}/{mathpix_result.pdf_id}.tex"
             response = requests.get(url, headers=self.headers)
             mathpix_result.zip_bytes = response.content
         except requests.exceptions as e:
+            logging.error("Error downloading tex.zip")
             mathpix_result.error = e
 
         return mathpix_result
@@ -180,8 +188,9 @@ class MathpixResultParser:
         with zip_ref.open(tex_filename, 'r') as tex_file:
             pdf_result.raw_latex = tex_file.read().decode('utf-8')
 
+        logging.info("Processing latex...")
         latex_chunks = get_latex_chunks(pdf_result.raw_latex)
-        for chunk in latex_chunks:
+        for chunk in tqdm(latex_chunks, total=len(latex_chunks)):
             match chunk.type:
                 case LatexChunkType.text:
                     chunk.processed_content = chunk.raw_content
@@ -201,6 +210,7 @@ class MathpixResultParser:
                 case _:
                     raise ValueError(f"Unknown chunk type: {chunk.type}")
 
+        logging.info("Cleaning up latex string")
         latex_str = "".join([chunk.processed_content for chunk in latex_chunks])
         latex_str = preprocess_regex(latex_str)
         latex_str = LatexNodes2Text().latex_to_text(latex_str)
@@ -215,6 +225,7 @@ class MathpixResultParser:
 
         chain = self.vision_model | StrOutputParser()
 
+        logging.info("Converting image...")
         response = chain.invoke(
             [
                 HumanMessage(
@@ -237,5 +248,6 @@ class MathpixResultParser:
         prompt = ChatPromptTemplate.from_template(TABLE_TEMPLATE)
         chain = prompt | self.text_model | StrOutputParser()
 
+        logging.info("Converting table...")
         response = chain.invoke({"table": table_str})
         return response
