@@ -12,13 +12,13 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pylatexenc.latex2text import LatexNodes2Text
 from tqdm import tqdm
 
-from latex_helpers import LatexChunk, LatexChunkType
-from latex_helpers import get_latex_chunks, fetch_img, fetch_tex_filename
-from latex_helpers import preprocess_regex, postprocess_regex
+from pdf_parser.latex_helpers import LatexChunk, LatexChunkType
+from pdf_parser.latex_helpers import get_latex_chunks, fetch_img, fetch_tex_filename
+from pdf_parser.latex_helpers import preprocess_regex, postprocess_regex
 
 TABLE_TEMPLATE = \
     """Your role is to prepare scientific papers for blind scientists. You need to convert tables in scientific articles for their display on Braille linear displays. Attached is a certain table in LaTeX format. You need to:
@@ -55,19 +55,19 @@ TABLE_END_DELIMITER = '\n<===TABLE END===>\n'
 
 
 class MathpixResult(BaseModel):
-    src_path: Path
-    pdf_id: str
-    zip_bytes: bytes
+    src_path: Path = None
+    pdf_id: str = None
+    zip_bytes: bytes = None
     error: str = None
     error_info: Any = None
 
 
 class PdfResult(BaseModel):
-    raw_latex: str
-    content: str
-    text: List[LatexChunk]
-    tables: List[LatexChunk]
-    images: List[LatexChunk]
+    raw_latex: str = None
+    content: str = None
+    text: List[LatexChunk] = Field(default_factory=list)
+    tables: List[LatexChunk] = Field(default_factory=list)
+    images: List[LatexChunk] = Field(default_factory=list)
 
 
 class MathpixProcessor:
@@ -117,7 +117,7 @@ class MathpixProcessor:
 
         return mathpix_result
 
-    def await_result(self, mathpix_result: MathpixResult, timeout_s: int, sleep_s: int = 5) -> MathpixResult:
+    def await_result(self, mathpix_result: MathpixResult, timeout_s: int = 60, sleep_s: int = 5) -> MathpixResult:
         with tqdm(total=100, desc="Processing % ...") as pbar:
             start_time = time.time()
             while True:
@@ -129,7 +129,7 @@ class MathpixProcessor:
                 response = requests.get(url, headers=self.headers)
 
                 if response.ok:
-                    response_dict = json.loads(response.text.encode("utf8"))
+                    response_dict = response.json()
                     status = response_dict["status"]
                     percent_done = int(response_dict["percent_done"]) if "percent_done" in response_dict else 0
 
@@ -138,7 +138,7 @@ class MathpixProcessor:
                         break
 
                     pbar.update(percent_done - pbar.n)
-                    if status == "complete":
+                    if status == "completed":
                         break
                 else:
                     try:

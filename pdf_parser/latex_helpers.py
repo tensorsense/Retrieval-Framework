@@ -98,7 +98,7 @@ def get_latex_chunks(latex_str: str) -> List[LatexChunk]:
 
     # 3. For each chunk, extract it's corresponding piece of latex string
     for chunk in all_chunks:
-        chunk.content = latex_str[chunk.start:chunk.end]
+        chunk.raw_content = latex_str[chunk.start:chunk.end]
 
     return all_chunks
 
