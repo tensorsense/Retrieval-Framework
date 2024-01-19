@@ -250,13 +250,21 @@ class MathpixResultParser:
         return response
 
 
+class MathpixProcessingError(Exception):
+    pass
+
+
 class MathpixPdfConverter:
     def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
         self.processor = MathpixProcessor()
         self.parser = MathpixResultParser(text_model=text_model, vision_model=vision_model)
 
-    def convert(self, pdf_path: Path):
+    def convert(self, pdf_path: Path) -> PdfResult:
         mathpix_result = self.processor.submit_pdf(pdf_path)
+        if mathpix_result.error:
+            raise MathpixProcessingError(mathpix_result.error)
         mathpix_result = self.processor.await_result(mathpix_result)
+        if mathpix_result.error:
+            raise MathpixProcessingError(mathpix_result.error)
         pdf_result = self.parser.parse_result(mathpix_result)
         return pdf_result
