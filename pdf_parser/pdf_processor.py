@@ -119,7 +119,7 @@ class MathpixProcessor:
         return mathpix_result
 
     def await_result(self, mathpix_result: MathpixResult, timeout_s: int = 60, sleep_s: int = 5) -> MathpixResult:
-        with tqdm(total=100, desc="Processing...") as pbar:
+        with tqdm(total=100, desc="Processing on the Mathpix side...") as pbar:
             start_time = time.time()
             while True:
                 if time.time() - start_time > timeout_s:
@@ -187,7 +187,7 @@ class MathpixResultParser:
 
         logging.info("Processing latex...")
         latex_chunks = get_latex_chunks(pdf_result.raw_latex)
-        for chunk in tqdm(latex_chunks, total=len(latex_chunks)):
+        for chunk in tqdm(latex_chunks, total=len(latex_chunks), desc="Converting latex chunks..."):
             match chunk.type:
                 case LatexChunkType.text:
                     chunk.processed_content = chunk.raw_content
