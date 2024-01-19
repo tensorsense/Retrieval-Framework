@@ -6,7 +6,7 @@ import concurrent.futures
 import sys
 from functools import partial
 
-from pdf_parser.pdf_processor import PdfProcessor
+from pdf_processor.pdf_processor import PdfProcessor
 from summarize import summarize_file
 import config
 

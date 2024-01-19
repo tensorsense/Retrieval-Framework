@@ -16,9 +16,9 @@ from pydantic import BaseModel, Field
 from pylatexenc.latex2text import LatexNodes2Text
 from tqdm import tqdm
 
-from pdf_parser.latex_helpers import LatexChunk, LatexChunkType
-from pdf_parser.latex_helpers import get_latex_chunks, fetch_img, fetch_tex_filename
-from pdf_parser.latex_helpers import preprocess_regex, postprocess_regex
+from pdf_processor.latex_helpers import LatexChunk, LatexChunkType
+from pdf_processor.latex_helpers import get_latex_chunks, fetch_img, fetch_tex_filename
+from pdf_processor.latex_helpers import preprocess_regex, postprocess_regex
 import logging
 
 TABLE_TEMPLATE = \
