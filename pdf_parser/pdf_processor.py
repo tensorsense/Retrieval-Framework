@@ -56,22 +56,25 @@ TABLE_END_DELIMITER = '\n<===TABLE END===>\n'
 
 
 class MathpixResult(BaseModel):
-    src_path: Path = None
-    pdf_id: str = None
-    zip_bytes: bytes = None
-    error: str = None
+    src_path: Path = None  # path to original pdf
+    pdf_id: str = None  # id assigned by Mathpix API
+    zip_bytes: bytes = None  # tex.zip file with processing results
+    error: str = None  # an error encountered during processing on Mathpix side or on the app side
     error_info: Any = None
 
 
 class PdfResult(BaseModel):
-    raw_latex: str = None
-    content: str = None
+    raw_latex: str = None  # original latex string extracted from the .tex file
+    content: str = None  # text after conversion and cleanup
     text: List[LatexChunk] = Field(default_factory=list)
-    tables: List[LatexChunk] = Field(default_factory=list)
+    tables: List[LatexChunk] = Field(default_factory=list)  # pre-conversion chunks extracted from raw latex
     images: List[LatexChunk] = Field(default_factory=list)
 
 
 class MathpixProcessor:
+    """
+    A class that interacts with Mathpix API from uploading files to downloading results.
+    """
     MATHPIX_ENDPOINT = "https://api.mathpix.com/v3/pdf"  # no trailing slash
 
     def __init__(self):
@@ -92,6 +95,14 @@ class MathpixProcessor:
         }
 
     def submit_pdf(self, pdf_path: Path) -> MathpixResult:
+        """
+        Submit a PDF file to Mathpix.
+
+        :param pdf_path: pathlib.Path to file
+        :return: MathpixResult object with .pdf_id (and NO result)
+
+        Does not raise errors but stores them in the returned object.
+        """
         logging.info(f"Submitting {pdf_path.name}...")
         response = requests.post(
             self.MATHPIX_ENDPOINT,
@@ -118,7 +129,20 @@ class MathpixProcessor:
 
         return mathpix_result
 
-    def await_result(self, mathpix_result: MathpixResult, timeout_s: int = 60, sleep_s: int = 5) -> MathpixResult:
+    def await_result(
+            self,
+            mathpix_result: MathpixResult,
+            timeout_s: int = 60,
+            sleep_s: int = 5
+    ) -> MathpixResult:
+        """
+        Request processing status in a loop, download results when complete.
+
+        :param mathpix_result: Mathpix result object WITH .pdf_id
+        :param timeout_s: max wait time in seconds
+        :param sleep_s: interval between status requests
+        :return: Mathpix result object with .zip_bytes (if download is successful)
+        """
         with tqdm(total=100, desc="Processing on the Mathpix side...") as pbar:
             start_time = time.time()
             while True:
@@ -167,11 +191,26 @@ class MathpixProcessor:
 
 
 class MathpixResultParser:
+    """
+    This class is for extracting information from a .tex file and converting in to text.
+    """
+
     def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
+        """
+        :param text_model: instance of a LangChain model such as ChatOpenAI
+        :param vision_model: instance of a LangChain multimodal model
+            such as ChatOpenAI with gpt-4-vision-preview
+
+        """
         self.text_model: BaseChatModel = text_model
         self.vision_model: BaseChatModel = vision_model
 
     def parse_result(self, mathpix_result: MathpixResult) -> PdfResult:
+        """
+        :param mathpix_result: MathpixResult object with .pdf_id and .zip_bytes.
+            Could be from MathpixProcessor or made manually.
+        :return: PdfResult object with .content (fully processed text) and intermediate results
+        """
         assert mathpix_result.zip_bytes is not None, \
             f"Missing tex.zip content. Did you call MathpixProcessor.await_result()?"
 
@@ -217,6 +256,9 @@ class MathpixResultParser:
         return pdf_result
 
     def convert_image(self, img_bytes: bytes) -> str:
+        """
+        Run image through a vision model to extract information into text
+        """
         img_b64 = base64.b64encode(img_bytes).decode("utf-8")
         img_url = f"data:image/jpeg;base64,{img_b64}"
 
@@ -242,6 +284,9 @@ class MathpixResultParser:
         return response
 
     def convert_table(self, table_str: str) -> str:
+        """
+        Run latex table through an LLM to extract information into text
+        """
         prompt = ChatPromptTemplate.from_template(TABLE_TEMPLATE)
         chain = prompt | self.text_model | StrOutputParser()
 
@@ -255,11 +300,20 @@ class MathpixProcessingError(Exception):
 
 
 class MathpixPdfConverter:
+    """
+    Convenience class for processing PDFs using MathPix API
+    """
+
     def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
         self.processor = MathpixProcessor()
         self.parser = MathpixResultParser(text_model=text_model, vision_model=vision_model)
 
     def convert(self, pdf_path: Path) -> PdfResult:
+        """
+        Convert pdf to text
+        :param pdf_path: Path to the pdf
+        :return: PdfResult with .content attribute that contains final text
+        """
         mathpix_result = self.processor.submit_pdf(pdf_path)
         if mathpix_result.error:
             raise MathpixProcessingError(mathpix_result.error)
