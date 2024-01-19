@@ -91,9 +91,6 @@ class MathpixProcessor:
             # "rm_spaces": True
         }
 
-    def process(self, pdf_path: Path) -> MathpixResult:
-        pass
-
     def submit_pdf(self, pdf_path: Path) -> MathpixResult:
         logging.info(f"Submitting {pdf_path.name}...")
         response = requests.post(
@@ -251,3 +248,15 @@ class MathpixResultParser:
         logging.info("Converting table...")
         response = chain.invoke({"table": table_str})
         return response
+
+
+class MathpixPdfConverter:
+    def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
+        self.processor = MathpixProcessor()
+        self.parser = MathpixResultParser(text_model=text_model, vision_model=vision_model)
+
+    def convert(self, pdf_path: Path):
+        mathpix_result = self.processor.submit_pdf(pdf_path)
+        mathpix_result = self.processor.await_result(mathpix_result)
+        pdf_result = self.parser.parse_result(mathpix_result)
+        return pdf_result
