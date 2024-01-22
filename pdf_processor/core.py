@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import List, Any
 
 import requests
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+# from llama_index.core.llms.types import ChatMessage
+from llama_index.llms import LLM
+from llama_index.multi_modal_llms import MultiModalLLM
+from llama_index.schema import ImageDocument
+
 from pydantic import BaseModel, Field
 from pylatexenc.latex2text import LatexNodes2Text
 from tqdm import tqdm
@@ -21,7 +22,7 @@ from pdf_processor.latex_helpers import get_latex_chunks, fetch_img, fetch_tex_f
 from pdf_processor.latex_helpers import preprocess_regex, postprocess_regex
 import logging
 
-TABLE_TEMPLATE = \
+TABLE_PROMPT = \
     """Your role is to prepare scientific papers for blind scientists. You need to convert tables in scientific articles for their display on Braille linear displays. Attached is a certain table in LaTeX format. You need to:
     1.) Understand where the header is and where the content is.
     2.) Then, for each row, output the information in the following format: <Column 1 Name>: <value for column 1 for the current row>; <Column 2 Name>: <value for column 2 for the current row>; ...; <Last Column Name>: <value for the last column for the current row>
@@ -34,7 +35,6 @@ TABLE_TEMPLATE = \
     9.) Remove all TeX or LaTeX syntax in the output, use only understandable to the layman math symbols and notations.
 
     Here is the table:
-    {table}
     """
 
 IMAGE_PROMPT = \
@@ -195,15 +195,13 @@ class MathpixResultParser:
     This class is for extracting information from a .tex file and converting in to text.
     """
 
-    def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
+    def __init__(self, text_model: LLM, vision_model: MultiModalLLM):
         """
-        :param text_model: instance of a LangChain model such as ChatOpenAI
-        :param vision_model: instance of a LangChain multimodal model
-            such as ChatOpenAI with gpt-4-vision-preview
-
+        :param text_model: instance of a LlamaIndex LLM such as OpenAI
+        :param vision_model: instance of a LlamaIndex MultiModalLLM such as OpenAIMultiModal
         """
-        self.text_model: BaseChatModel = text_model
-        self.vision_model: BaseChatModel = vision_model
+        self.text_model: LLM = text_model
+        self.vision_model: MultiModalLLM = vision_model
 
     def parse_result(self, mathpix_result: MathpixResult) -> PdfResult:
         """
@@ -260,39 +258,21 @@ class MathpixResultParser:
         Run image through a vision model to extract information into text
         """
         img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        img_url = f"data:image/jpeg;base64,{img_b64}"
-
-        chain = self.vision_model | StrOutputParser()
+        img_doc = ImageDocument(image=img_b64, image_mimetype="image/jpeg")
 
         logging.info("Converting image...")
-        response = chain.invoke(
-            [
-                HumanMessage(
-                    content=[
-                        {"type": "text", "text": IMAGE_PROMPT},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": img_url,
-                                "detail": "auto",
-                            },
-                        },
-                    ]
-                )
-            ]
+        response = self.vision_model.complete(
+            prompt=IMAGE_PROMPT,
+            image_documents=[img_doc],
         )
-        return response
+        return response.text
 
     def convert_table(self, table_str: str) -> str:
         """
         Run latex table through an LLM to extract information into text
         """
-        prompt = ChatPromptTemplate.from_template(TABLE_TEMPLATE)
-        chain = prompt | self.text_model | StrOutputParser()
-
-        logging.info("Converting table...")
-        response = chain.invoke({"table": table_str})
-        return response
+        response = self.text_model.complete(f"{TABLE_PROMPT}\n{table_str}")
+        return response.text
 
 
 class MathpixProcessingError(Exception):
@@ -304,7 +284,7 @@ class MathpixPdfConverter:
     Convenience class for processing PDFs using MathPix API
     """
 
-    def __init__(self, text_model: BaseChatModel, vision_model: BaseChatModel):
+    def __init__(self, text_model: LLM, vision_model: MultiModalLLM):
         self.processor = MathpixProcessor()
         self.parser = MathpixResultParser(text_model=text_model, vision_model=vision_model)
 
