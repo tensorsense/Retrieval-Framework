@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import List, Any
 
 import requests
-# from llama_index.core.llms.types import ChatMessage
+from llama_index.core.llms.types import ChatMessage
+from llama_index.multi_modal_llms.openai_utils import generate_openai_multi_modal_chat_message
 from llama_index.llms import LLM
 from llama_index.multi_modal_llms import MultiModalLLM
 from llama_index.schema import ImageDocument
@@ -259,23 +260,28 @@ class MathpixResultParser:
         """
         img_b64 = base64.b64encode(img_bytes).decode("utf-8")
         img_doc = ImageDocument(image=img_b64, image_mimetype="image/jpeg")
-
-        logging.info("Converting image...")
-        response = self.vision_model.complete(
+        message = generate_openai_multi_modal_chat_message(
             prompt=IMAGE_PROMPT,
+            role="user",
             image_documents=[img_doc],
         )
-        return response.text
+        logging.info("Converting image...")
+        response = self.vision_model.chat([message])
+        return response.message.content
 
     def convert_table(self, table_str: str) -> str:
         """
         Run latex table through an LLM to extract information into text
         """
-        response = self.text_model.complete(f"{TABLE_PROMPT}\n{table_str}")
-        return response.text
+        response = self.text_model.chat(
+            [
+                ChatMessage(role="user", content=f"{TABLE_PROMPT}\n{table_str}"),
+            ]
+        )
+        return response.message.content
 
 
-class MathpixProcessingError(Exception):
+class MathpixProcessingError(BaseException):
     pass
 
 
