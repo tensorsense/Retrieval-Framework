@@ -1,37 +1,70 @@
 # Retrieval Framework
 
-## Configuration
+This is a tool that converts scientific PDFs into plain text for your LLM-related needs.
 
-1. Create `.env` from `.env.example`, provide:
-- to use regular openai api (openai.com) provide `OPENAI_API_KEY`
-- to use azure deployment provide:
-  - `AZURE_OPENAI_ENDPOINT`
-  - `AZURE_OPENAI_API_KEY`
-  - `AZURE_OPENAI_DEPLOYMENT_CHAT`: required for PDF import and RAG
-  - `AZURE_OPENAI_DEPLOYMENT_EMBEDDING`: required only for RAG
-  - `AZURE_OPENAI_DEPLOYMENT_VISION`: required only for PDF import
-- `MATHPIX_APP_ID` and `MATHPIX_APP_KEY`: required only for PDF import
+- Convert PDF to LaTeX using [Mathpix API](https://docs.mathpix.com/#introduction) that is tailored to work with scientific papers.
+- Extract images and tables from LaTeX and replace them with text using a multimodal LLM.
+  - The prompts are made to extract all values and relationships represented within each table or graph and minimize information loss.
 
-2. In `config.py`:
-- set `OPENAI_PROVIDER` according to .env: `openai` / `azure`
+## Basic usage
 
-## PDF import
+Refer to [this notebook](https://github.com/tensorsense/Retrieval-Framework/blob/main/pdfs_to_rag.ipynb) to learn more about:
 
-1. Put PDF files in `library/inbox`.
-2. Run `python3 process_inbox.py`
-3. Check `library/fulltext` for full text parses and `library/summary` for summaries.
+- Configuring and running end-to-end PDF conversion.
+- Creating a basic LlamaIndex RAG on top of your converted documents
+- Evaluating RAG performance using TruLens
 
-Processed PDFs are moved to `library/archive`.
+1. Set `MATHPIX_APP_ID` and `MATHPIX_APP_KEY` in your environment. We suggest using a `.env` file.
 
-## Build the RAG
-Build a RAG chain based on a simple retriever on top of the text library.
-Run `python3 factory.py`
+```python
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv(".env"))  # read local .env file
+```
 
-## Evaluate the RAG
+2. Instantiate a text and a vision model. This tool uses LlamaIndex abstractions to interface with LLMs.
 
-Calculate a [RAG triad](https://www.trulens.org/trulens_eval/core_concepts_rag_triad/) of metrics using TruLens.
+```python
+from llama_index.llms import OpenAI
+from llama_index.multi_modal_llms import OpenAIMultiModal
 
-1. set `TRULENS_QUESTIONS` in config.py
-2. Run `python3 eval.py`.
-3. Open the dashboard in a browser at localhost:8000.
-4. Wait for evaluation runs to finish.
+text_model = OpenAI()
+vision_model = OpenAIMultiModal(max_new_tokens=4096)
+```
+
+Next, pass those models to the converter.
+
+```python
+converter = MathpixPdfConverter(text_model=text_model, vision_model=vision_model)
+```
+
+3. Convert PDF and extract the result.
+
+```python
+pdf_path = Path("path/to/file.pdf")
+
+pdf_result = converter.convert(pdf_path)
+
+with Path(f"output.txt").open("w") as f:
+    f.write(pdf_result.content)
+```
+
+## Custom workflow
+
+In order to persist intermediate results or run processing in parallel,
+you can use `MathpixProcessor` and `MathpixResultParser` directly.
+
+```python
+processor = MathpixProcessor()
+parser = MathpixResultParser(text_model=text_model, vision_model=vision_model)
+
+mathpix_result = processor.submit_pdf(pdf_path)
+mathpix_result = processor.await_result(mathpix_result)
+pdf_result = parser.parse_result(mathpix_result)
+```
+
+## See also
+
+- LlamaIndex [docs](https://docs.llamaindex.ai/en/stable/getting_started/starter_example.html)
+- Mathpix API [docs](https://docs.mathpix.com/#introduction)
+- TruLens [docs](https://www.trulens.org/trulens_eval/llama_index_quickstart/)
+- Pydantic [docs](https://docs.pydantic.dev/latest/api/base_model/)
