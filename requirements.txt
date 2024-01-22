@@ -1,5 +1,9 @@
-pylatexenc
-openai
-langchain
-trulens-eval
-requests
+llama-index==0.9.33
+python-dotenv==1.0.0
+trulens-eval==0.20.0
+numpy==1.26.2
+pylatexenc==2.10
+requests==2.31.0
+pydantic==2.5.2
+tqdm==4.66.1
+openai==1.6.1
