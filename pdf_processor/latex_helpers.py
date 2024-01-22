@@ -24,6 +24,9 @@ class LatexChunk(BaseModel):
 
 
 def fetch_tex_filename(zip_ref: zipfile.ZipFile) -> str:
+    """
+    Fetches the name of the source latex file from the archive
+    """
     tex_filename = None
     for file in zip_ref.namelist():
         if file.endswith(".tex"):
@@ -33,12 +36,21 @@ def fetch_tex_filename(zip_ref: zipfile.ZipFile) -> str:
 
 
 def fetch_img(zip_ref: zipfile.ZipFile, path: Path) -> bytes:
+    """
+    Extracts the image from the archive
+    """
     with zip_ref.open(path.as_posix(), "r") as f:
         img = f.read()
     return img
 
 
 def get_latex_chunks(latex_str: str) -> List[LatexChunk]:
+    """
+    Splits latex string into a list of LatexChunk objects, each containing a piece of regular text,
+    a latex table or a latex code that inserts an image.
+    :param latex_str: Raw latex string
+    :return: List of LatexChunk, each with .raw_content. Images additionally get .filename.
+    """
     walker = LatexWalker(latex_str)
     nodes, _, _ = walker.get_latex_nodes()
 
