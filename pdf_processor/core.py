@@ -67,6 +67,7 @@ class MathpixResult(BaseModel):
 
 
 class PdfResult(BaseModel):
+    pdf_id: str  # identifier of the document
     raw_latex: Optional[str] = None  # original latex string extracted from the .tex file
     content: Optional[str] = None  # text after conversion and cleanup
     text: List[LatexChunk] = Field(default_factory=list)
@@ -217,6 +218,7 @@ class MathpixResultParser:
             Could be from MathpixProcessor or made manually.
         :return: PdfResult object with .content (fully processed text) and intermediate results
         """
+        assert mathpix_result.pdf_id is not None, "Missing pdf_id in the MathpixResult"
         assert mathpix_result.zip_b64 is not None, \
             f"Missing tex.zip content. Did you call MathpixProcessor.await_result()?"
 
@@ -229,7 +231,7 @@ class MathpixResultParser:
         assert tex_filename is not None, \
             f"Could not find .tex file in tex.zip"
 
-        pdf_result = PdfResult()
+        pdf_result = PdfResult(pdf_id=mathpix_result.pdf_id)
         with zip_ref.open(tex_filename, 'r') as tex_file:
             pdf_result.raw_latex = tex_file.read().decode('utf-8')
 
