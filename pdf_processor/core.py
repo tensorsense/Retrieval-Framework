@@ -248,6 +248,7 @@ class MathpixResultParser:
                 case LatexChunkType.image:
                     img_path = Path(f"{mathpix_result.pdf_id}") / "images" / f"{chunk.filename}.jpg"
                     img = fetch_img(zip_ref, img_path)
+                    chunk.file_b64 = base64.b64encode(img).decode("utf-8")
                     chunk.processed_content = (f"{IMAGE_START_DELIMITER}"
                                                f"\n{self.convert_image(img)}"
                                                f"\n{IMAGE_END_DELIMITER}")
