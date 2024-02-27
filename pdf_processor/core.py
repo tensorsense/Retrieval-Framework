@@ -1,18 +1,19 @@
 import base64
+import hashlib
 import io
 import json
 import os
 import time
 import zipfile
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Optional
 
 import requests
-from llama_index.core.llms.types import ChatMessage
-from llama_index.multi_modal_llms.openai_utils import generate_openai_multi_modal_chat_message
-from llama_index.llms import LLM
-from llama_index.multi_modal_llms import MultiModalLLM
-from llama_index.schema import ImageDocument
+from llama_index.core.base.llms.types import ChatMessage
+from llama_index.multi_modal_llms.openai.utils import generate_openai_multi_modal_chat_message
+from llama_index.core.llms import LLM
+from llama_index.core.multi_modal_llms import MultiModalLLM
+from llama_index.core.schema import ImageDocument
 
 from pydantic import BaseModel, Field
 from pylatexenc.latex2text import LatexNodes2Text
@@ -57,16 +58,18 @@ TABLE_END_DELIMITER = '\n<===TABLE END===>\n'
 
 
 class MathpixResult(BaseModel):
-    src_path: Path = None  # path to original pdf
-    pdf_id: str = None  # id assigned by Mathpix API
-    zip_bytes: bytes = None  # tex.zip file with processing results
-    error: str = None  # an error encountered during processing on Mathpix side or on the app side
-    error_info: Any = None
+    src_path: Optional[Path] = None  # path to original pdf
+    pdf_id: Optional[str] = None  # id assigned by Mathpix API
+    zip_b64: Optional[str] = None  # b64 encoded tex.zip file with processing results
+    zip_hash: Optional[str] = None  # sha256 hash of the raw tex.zip
+    error: Optional[str] = None  # an error encountered during processing on Mathpix side or on the app side
+    error_info: Optional[Any] = None
 
 
 class PdfResult(BaseModel):
-    raw_latex: str = None  # original latex string extracted from the .tex file
-    content: str = None  # text after conversion and cleanup
+    pdf_id: str  # identifier of the document
+    raw_latex: Optional[str] = None  # original latex string extracted from the .tex file
+    content: Optional[str] = None  # text after conversion and cleanup
     text: List[LatexChunk] = Field(default_factory=list)
     tables: List[LatexChunk] = Field(default_factory=list)  # pre-conversion chunks extracted from raw latex
     images: List[LatexChunk] = Field(default_factory=list)
@@ -142,8 +145,12 @@ class MathpixProcessor:
         :param mathpix_result: Mathpix result object WITH .pdf_id
         :param timeout_s: max wait time in seconds
         :param sleep_s: interval between status requests
-        :return: Mathpix result object with .zip_bytes (if download is successful)
+        :return: Mathpix result object with .zip_b64 (if download is successful)
         """
+        if mathpix_result.error is not None:
+            logging.warning(f"Received MathpixResult with non-empty error: {mathpix_result.error}. Ignoring...")
+            mathpix_result.error = None
+
         with tqdm(total=100, desc="Processing on the Mathpix side...") as pbar:
             start_time = time.time()
             while True:
@@ -183,7 +190,8 @@ class MathpixProcessor:
             logging.info("Downloading tex.zip...")
             url = f"{self.MATHPIX_ENDPOINT}/{mathpix_result.pdf_id}.tex"
             response = requests.get(url, headers=self.headers)
-            mathpix_result.zip_bytes = response.content
+            mathpix_result.zip_hash = hashlib.sha256(response.content).hexdigest()
+            mathpix_result.zip_b64 = base64.b64encode(response.content).decode("utf-8")
         except requests.exceptions as e:
             logging.error("Error downloading tex.zip")
             mathpix_result.error = e
@@ -206,20 +214,24 @@ class MathpixResultParser:
 
     def parse_result(self, mathpix_result: MathpixResult) -> PdfResult:
         """
-        :param mathpix_result: MathpixResult object with .pdf_id and .zip_bytes.
+        :param mathpix_result: MathpixResult object with .pdf_id and .zip_b64.
             Could be from MathpixProcessor or made manually.
         :return: PdfResult object with .content (fully processed text) and intermediate results
         """
-        assert mathpix_result.zip_bytes is not None, \
+        assert mathpix_result.pdf_id is not None, "Missing pdf_id in the MathpixResult"
+        assert mathpix_result.zip_b64 is not None, \
             f"Missing tex.zip content. Did you call MathpixProcessor.await_result()?"
 
-        zip_buffer = io.BytesIO(mathpix_result.zip_bytes)
+        zip_bytes = base64.b64decode(mathpix_result.zip_b64.encode("utf-8"))
+        assert hashlib.sha256(zip_bytes).hexdigest() == mathpix_result.zip_hash, "tex.zip got broken during storage"
+
+        zip_buffer = io.BytesIO(zip_bytes)
         zip_ref = zipfile.ZipFile(zip_buffer, "r")
         tex_filename = fetch_tex_filename(zip_ref)
         assert tex_filename is not None, \
             f"Could not find .tex file in tex.zip"
 
-        pdf_result = PdfResult()
+        pdf_result = PdfResult(pdf_id=mathpix_result.pdf_id)
         with zip_ref.open(tex_filename, 'r') as tex_file:
             pdf_result.raw_latex = tex_file.read().decode('utf-8')
 
@@ -238,6 +250,7 @@ class MathpixResultParser:
                 case LatexChunkType.image:
                     img_path = Path(f"{mathpix_result.pdf_id}") / "images" / f"{chunk.filename}.jpg"
                     img = fetch_img(zip_ref, img_path)
+                    chunk.file_b64 = base64.b64encode(img).decode("utf-8")
                     chunk.processed_content = (f"{IMAGE_START_DELIMITER}"
                                                f"\n{self.convert_image(img)}"
                                                f"\n{IMAGE_END_DELIMITER}")

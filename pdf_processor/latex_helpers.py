@@ -2,7 +2,7 @@ import zipfile
 import re
 from enum import Enum, auto
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 from pylatexenc.latexwalker import LatexWalker, LatexEnvironmentNode, LatexMacroNode, LatexGroupNode, LatexNode
@@ -18,9 +18,10 @@ class LatexChunk(BaseModel):
     start: int  # starting position of a chunk within latex string
     end: int  # ending position
     type: LatexChunkType  # type of content inside the chunk
-    filename: str = None  # filename to which the node links, if applicable
-    raw_content: str = None  # piece of a latex string from start to end
-    processed_content: str = None  # content after processing
+    filename: Optional[str] = None  # filename to which the node links, if applicable
+    file_b64: Optional[str] = None  # file content b64 string
+    raw_content: Optional[str] = None  # piece of a latex string from start to end
+    processed_content: Optional[str] = None  # content after processing
 
 
 def fetch_tex_filename(zip_ref: zipfile.ZipFile) -> str:
