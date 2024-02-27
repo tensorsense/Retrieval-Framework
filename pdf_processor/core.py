@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import List, Any, Optional
 
 import requests
-from llama_index.core.llms.types import ChatMessage
-from llama_index.multi_modal_llms.openai_utils import generate_openai_multi_modal_chat_message
-from llama_index.llms import LLM
-from llama_index.multi_modal_llms import MultiModalLLM
-from llama_index.schema import ImageDocument
+from llama_index.core.base.llms.types import ChatMessage
+from llama_index.multi_modal_llms.openai.utils import generate_openai_multi_modal_chat_message
+from llama_index.core.llms import LLM
+from llama_index.core.multi_modal_llms import MultiModalLLM
+from llama_index.core.schema import ImageDocument
 
 from pydantic import BaseModel, Field
 from pylatexenc.latex2text import LatexNodes2Text
